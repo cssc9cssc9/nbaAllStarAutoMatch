@@ -22,7 +22,7 @@ https://blog.csdn.net/qq_39574690/article/details/127255284
 
 1. 打開`main.exe`。
 2. 輸入剛才找到的ADB位址(預設起始設備為emulator-5554)。
-3. 按下Enter鍵開始自動掛機。
+3. 點擊開始啟動自動掛機。
 
 ## 注意事項
 
