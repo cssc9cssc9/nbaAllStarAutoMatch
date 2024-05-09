@@ -119,14 +119,13 @@ class allstarWorker(QtCore.QThread):
                         
                 self.__threadSleep(21)
                 
-            if self.startTimes <=0:
-                self.emitLog.emit(f"AFK mode finish (times:{self.startTimes})")
-                if (matchTimes>0):
-                    self.emitLog.emit(f"共進行了{matchTimes}場，共贏了{matchTimes-matchLoseTimes}場，勝率為 {(matchTimes-matchLoseTimes)/matchTimes*100:.2f}%")
-                self.isFinish.emit()
+
+            self.emitLog.emit(f"===== 結束掛機 =====")
+            if (matchTimes>0):
+                self.emitLog.emit(f"共進行了{matchTimes}場，共贏了{matchTimes-matchLoseTimes}場，勝率為 {(matchTimes-matchLoseTimes)/matchTimes*100:.2f}%")
+            self.isFinish.emit()
                 
         except Exception as exc:
-            print(exc)
             self.emitLog.emit(str(exc))
             self.isError.emit()
 
