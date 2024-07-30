@@ -11,10 +11,11 @@
 from adbutils import adb, AdbDevice
 import numpy as np
 import aircv
+import os
 import json
 import random
 from PyQt6 import QtCore, QtGui, QtWidgets
-
+CONFIG_PATH = "./config.json"
 class allstarWorker(QtCore.QThread):
     randomClick = False
     randomTime = False
@@ -22,6 +23,9 @@ class allstarWorker(QtCore.QThread):
     startMode = 0
     startTimes = 0
     device = None
+    isTerminate = False
+    numOfProcessMatches = 0
+    numOfLoseMatches = 0
 
     isStart = QtCore.pyqtSignal()
     isProgress = QtCore.pyqtSignal(str)
@@ -34,18 +38,40 @@ class allstarWorker(QtCore.QThread):
 
     def __init__(self):
         super().__init__()
+        self.config = self.LoadConfig()
 
+    def LoadConfig(self):
+        if os.path.exists(CONFIG_PATH):
+            with open(CONFIG_PATH, "r") as fp:
+                config = json.load(fp)
+        return config
+    
+    def TriggerMumuADB(self):
+        try:
+            if self.config:
+                if os.path.exists(self.config["mumu_path"]):
+                    import subprocess
+                    mumu_shell_path = self.config["mumu_path"]
+                    adb_address = self.config["adb_addr"]
+                    adb_path = os.path.join(self.config["mumu_path"], "adb.exe")
+                    subprocess.run([adb_path, "connect", adb_address])
+        except Exception as exc:
+            self.emitLog.emit(str(exc))
+            self.isError.emit()
     def setVariable(self, connectPort:str, startTimes:int, randomTime: bool, randomClick:bool):
         self.startTimes = startTimes
         self.connectPort = connectPort
         self.randomClick = randomClick
         self.randomTime = randomTime
         
+    def ChangeTerminateStatus(self):
+        self.isTerminate = True
     
     def run(self):
         self.isStart.emit()
         QtCore.QThread.sleep(1)
         try:
+            self.isTerminate = False
             self.emitLog.emit("===== 初始化 =====")
             self.__registerADBDeivce()
             QtCore.QThread.sleep(1)
@@ -55,79 +81,54 @@ class allstarWorker(QtCore.QThread):
             QtCore.QThread.sleep(1)
             self.emitLog.emit("===== 開始掛機 =====")
 
-            startMatchImg = aircv.cv2.cvtColor(aircv.imread("./img/startMatchButton.png"), aircv.cv2.COLOR_BGR2RGB)
-            matchingImg = aircv.cv2.cvtColor(aircv.imread("./img/matchStillGoOn.png"), aircv.cv2.COLOR_BGR2RGB)
-            matchFinishImg = aircv.cv2.cvtColor(aircv.imread("./img/matchFinish.png"), aircv.cv2.COLOR_BGR2RGB)
-            backToLubbyImg = aircv.cv2.cvtColor(aircv.imread("./img/backToLubby.png"), aircv.cv2.COLOR_BGR2RGB)
-            matchLoseImg = aircv.cv2.cvtColor(aircv.imread("./img/matchLose.png"), aircv.cv2.COLOR_BGR2RGB)
-            reachLimitImg = aircv.cv2.cvtColor(aircv.imread("./img/reachLimit.png"), aircv.cv2.COLOR_BGR2RGB)
+            startMatchImg = aircv.cv2.cvtColor(aircv.imread("./img/fvfstart.png"), aircv.cv2.COLOR_BGR2RGB)
+            fvfready = aircv.cv2.cvtColor(aircv.imread("./img/fvfready.png"), aircv.cv2.COLOR_BGR2RGB)
+            backToLubbyImg = aircv.cv2.cvtColor(aircv.imread("./img/fvfback.png"), aircv.cv2.COLOR_BGR2RGB)
+            img_list = [startMatchImg, backToLubbyImg]
+            matchDefaultTime = 180
+            self.numOfLoseMatches = 0
+            self.numOfProcessMatches = 0
 
-            matchDefaultTime = 330
-            matchLoseTimes = 0
-            matchTimes = 0
-
-            while self.startTimes>0:
+            while self.startTimes>0 and self.isTerminate == False:
                 
                 startMatchResult = self.__clickImgPosition(startMatchImg)
-                if not startMatchResult:
-                    self.emitLog.emit("未搜尋到配對按鈕")
-                    continue
-                self.emitLog.emit(f"> 第{matchTimes+1}場比賽開始 <")
+                while not startMatchResult :
+                    self.__threadSleep(4)
+                    startMatchResult = self.__clickImgPosition(startMatchImg)
+                self.emitLog.emit(f"> 第{self.numOfProcessMatches+1}場比賽開始 <")
                 self.emitLog.emit("開始配對")
                 self.startTimes -= 1
                 self.__threadSleep(5)
-                reachLimit = self.__clickImgPosition(reachLimitImg)
-                if reachLimit:
-                    self.emitLog.emit("已到達配對最高上限次數")
-                    break
-                matchTimes += 1
+
+                self.numOfProcessMatches += 1
                 matching = True
-                matchFinish = False
                 backToLubby = False
-
-                self.__threadSleep(matchDefaultTime, 30)
-                while matching == True:
-                    matchingResult = self.__findImgfromScreenshot(matchingImg)
-                    if matchingResult:
-                        self.__threadSleep(30)
-                    else:
-                        matching = False
-                self.__threadSleep(10)
-                while not matchFinish:
-                    matchFinishResult = self.__clickImgPosition(matchFinishImg)
-                    if matchFinishResult:
-                        matchFinish = True
-                        self.emitLog.emit("比賽結束")
-                    else:
-                        self.__threadSleep(3)
-                self.__threadSleep(5)
-
-                matchLoseResult = self.__findImgfromScreenshot(matchLoseImg)
-                if matchLoseResult:
-                    matchLoseTimes += 1
-                    self.emitLog.emit("失敗")
-                else:
-                    self.emitLog.emit("獲勝")
-                
+                self.__threadSleep(matchDefaultTime, 10)
+                if self.__clickImgPosition(fvfready):
+                    self.__threadSleep(matchDefaultTime, 10)
                 while not backToLubby:
                     backToLubbyResult = self.__clickImgPosition(backToLubbyImg)
                     if backToLubbyResult:
                         self.emitLog.emit("返回大廳")
                         backToLubby = True
                     else:
-                        self.__threadSleep(1)
-                        
-                self.__threadSleep(21)
-                
-
-            self.emitLog.emit(f"===== 結束掛機 =====")
-            if (matchTimes>0):
-                self.emitLog.emit(f"共進行了{matchTimes}場，共贏了{matchTimes-matchLoseTimes}場，勝率為 {(matchTimes-matchLoseTimes)/matchTimes*100:.2f}%")
+                        self.__threadSleep(30)
+            self.isTerminate = False
             self.isFinish.emit()
                 
         except Exception as exc:
             self.emitLog.emit(str(exc))
             self.isError.emit()
+                
+        except Exception as exc:
+            self.emitLog.emit(str(exc))
+            self.isError.emit()
+
+    def export_report(self):
+        
+        self.emitLog.emit(f"===== 結束掛機 =====")
+        if self.numOfProcessMatches >0:
+            self.emitLog.emit(f"共進行了{self.numOfProcessMatches}場，共贏了{self.numOfProcessMatches-self.numOfLoseMatches}場，勝率為 {(self.numOfProcessMatches-self.numOfLoseMatches)/self.numOfProcessMatches*100:.2f}%")
 
     def __clickImgPosition(self, img):
         findResult = self.__findImgfromScreenshot(img)
@@ -156,6 +157,10 @@ class allstarWorker(QtCore.QThread):
             self.emitLog.emit("adb連接失敗")
             raise exc
     
+    def __resetPosition(self, but_img_list):
+        for but_img in but_img_list:
+            self.__clickImgPosition(but_img)
+
 
     def __threadSleep(self, second, randomSecond=None):
         if self.randomTime:
@@ -172,12 +177,21 @@ class allstarWorker(QtCore.QThread):
         if self.device :
             screenshot = np.asarray(self.device.screenshot())
             posit = aircv.find_template(screenshot, img, thres)
-            print(posit)
             return posit
         return None
 
+
 class Ui_Main(object):
     start = False
+    config = None
+    def __init__(self):
+        self.config = self.LoadConfig()
+    def LoadConfig(self):
+        
+        if os.path.exists(CONFIG_PATH):
+            with open(CONFIG_PATH, "r") as fp:
+                config = json.load(fp)
+        return config
     def setupUi(self, Main):
         Main.setObjectName("Main")
         Main.resize(310, 460)
@@ -216,7 +230,7 @@ class Ui_Main(object):
         self.matchTimes.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight|QtCore.Qt.AlignmentFlag.AlignTrailing|QtCore.Qt.AlignmentFlag.AlignVCenter)
         self.matchTimes.setObjectName("matchTimes")
         self.connectPortTextShowLabel = QtWidgets.QLabel(parent=self.functionTab)
-        self.connectPortTextShowLabel.setGeometry(QtCore.QRect(40, 20, 71, 21))
+        self.connectPortTextShowLabel.setGeometry(QtCore.QRect(20, 20, 71, 21))
         font = QtGui.QFont()
         font.setFamily("微軟正黑體")
         font.setPointSize(12)
@@ -237,14 +251,14 @@ class Ui_Main(object):
         self.covenantTimeLabel.setGeometry(QtCore.QRect(220, 70, 20, 20))
         self.covenantTimeLabel.setObjectName("covenantTimeLabel")
         self.logTextBrowser = QtWidgets.QTextBrowser(parent=self.functionTab)
-        self.logTextBrowser.setGeometry(QtCore.QRect(40, 170, 200, 171))
+        self.logTextBrowser.setGeometry(QtCore.QRect(40, 200, 200, 141))
         font = QtGui.QFont()
         font.setFamily("微軟正黑體")
         font.setPointSize(10)
         self.logTextBrowser.setFont(font)
         self.logTextBrowser.setObjectName("logTextBrowser")
         self.connectPort = QtWidgets.QLineEdit(parent=self.functionTab)
-        self.connectPort.setGeometry(QtCore.QRect(120, 20, 140, 20))
+        self.connectPort.setGeometry(QtCore.QRect(109, 20, 131, 20))
         font = QtGui.QFont()
         font.setFamily("微軟正黑體")
         font.setPointSize(12)
@@ -253,7 +267,7 @@ class Ui_Main(object):
         self.connectPort.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight|QtCore.Qt.AlignmentFlag.AlignTrailing|QtCore.Qt.AlignmentFlag.AlignVCenter)
         self.connectPort.setObjectName("connectPort")
         self.matchTimesTextShowLabel = QtWidgets.QLabel(parent=self.functionTab)
-        self.matchTimesTextShowLabel.setGeometry(QtCore.QRect(40, 70, 65, 20))
+        self.matchTimesTextShowLabel.setGeometry(QtCore.QRect(40, 70, 71, 20))
         font = QtGui.QFont()
         font.setFamily("微軟正黑體")
         font.setPointSize(12)
@@ -268,22 +282,25 @@ class Ui_Main(object):
         self.randomClickCheckButton.setChecked(True)
         self.randomClickCheckButton.setObjectName("randomClickCheckButton")
         self.line = QtWidgets.QFrame(parent=self.functionTab)
-        self.line.setGeometry(QtCore.QRect(10, 50, 270, 3))
+        self.line.setGeometry(QtCore.QRect(0, 50, 300, 3))
         self.line.setFrameShape(QtWidgets.QFrame.Shape.HLine)
         self.line.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
         self.line.setObjectName("line")
+        self.mumuServerClickCheckButton = QtWidgets.QCheckBox(parent=self.functionTab)
+        self.mumuServerClickCheckButton.setEnabled(True)
+        self.mumuServerClickCheckButton.setGeometry(QtCore.QRect(40, 170, 121, 16))
+        self.mumuServerClickCheckButton.setChecked(True)
+        self.mumuServerClickCheckButton.setObjectName("mumuServerClickCheckButton")
         self.tabWidget.addTab(self.functionTab, "")
 
         self.retranslateUi(Main)
         self.tabWidget.setCurrentIndex(0)
         QtCore.QMetaObject.connectSlotsByName(Main)
-
         self.worker = allstarWorker()
         self.worker.isStart.connect(self.startWorker)
         self.worker.isFinish.connect(self.stopWorker)
         self.worker.isError.connect(self.errorWorker)
         self.worker.emitLog.connect(lambda text: self.logTextBrowser.append(text))
-
     def retranslateUi(self, Main):
         _translate = QtCore.QCoreApplication.translate
         Main.setWindowTitle(_translate("Main", "王朝模式掛機工具"))
@@ -294,19 +311,26 @@ class Ui_Main(object):
         self.logTextBrowser.setHtml(_translate("Main", "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" \"http://www.w3.org/TR/REC-html40/strict.dtd\">\n"
 "<html><head><meta name=\"qrichtext\" content=\"1\" /><style type=\"text/css\">\n"
 "p, li { white-space: pre-wrap; }\n"
-"</style></head><body style=\" font-family:\'微軟正黑體\'; font-size:10pt; font-weight:400; font-style:normal;\">\n"
-"<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">點擊開始啟動王朝自動掛機</p></body></html>"))
+"</style></head><body style=\" font-family:\'微軟正黑體\',\'微軟正黑體\',\'微軟正黑體\',\'微軟正黑體\'; font-size:10pt; font-weight:400; font-style:normal;\">\n"
+"<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"><span style=\" font-family:\'微軟正黑體\';\">點擊開始啟動王朝自動掛機</span></p></body></html>"))
+        add_addr = self.config["adb_addr"] if self.config else "emulator-5556"
+        self.connectPort.setText(_translate("Main", add_addr))
+        self.matchTimesTextShowLabel.setText(_translate("Main", "對戰次數"))
         self.randomTimeCheckButton.setText(_translate("Main", "隨機時間"))
         self.randomClickCheckButton.setText(_translate("Main", "隨機點擊位置"))
-        self.connectPort.setText(_translate("Main", "emulator-5554"))
-        self.matchTimesTextShowLabel.setText(_translate("Main", "對戰次數"))
+        self.mumuServerClickCheckButton.setText(_translate("Main", "Mumu模擬器"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.functionTab), _translate("Main", "功能"))
-
     def startPressEvent(self):
         self.start = not self.start
         if self.start:
             IsRandomTime = self.randomTimeCheckButton.isChecked()
             IsRandomClick = self.randomClickCheckButton.isChecked()
+            IsMumuServer = self.mumuServerClickCheckButton.isChecked()
+            try:
+                if IsMumuServer:
+                    self.worker.TriggerMumuADB()
+            except Exception as exc:
+                print(str(exc))
             matchTimes = int(self.matchTimes.text()) if self.matchTimes.text().isdigit() else 0
             connectPort = str(self.connectPort.text())
             self.worker.setVariable(connectPort, matchTimes, IsRandomTime, IsRandomClick)
@@ -320,10 +344,12 @@ class Ui_Main(object):
         if isDisabled:
             self.startButton.setText("停止")
         else:
+            self.worker.export_report()
             self.startButton.setText("開始")
         self.connectPort.setDisabled(isDisabled)
         self.randomTimeCheckButton.setDisabled(isDisabled)
         self.randomClickCheckButton.setDisabled(isDisabled)
+        self.mumuServerClickCheckButton.setDisabled(isDisabled)
         self.matchTimes.setDisabled(isDisabled)
 
     def startWorker(self):
@@ -340,10 +366,8 @@ class Ui_Main(object):
 
 if __name__ == "__main__":
     import sys
-
     app = QtWidgets.QApplication(sys.argv)
     app.setWindowIcon(QtGui.QIcon("main.ico"))
-
     Main = QtWidgets.QWidget()
     ui = Ui_Main()
     ui.setupUi(Main)
