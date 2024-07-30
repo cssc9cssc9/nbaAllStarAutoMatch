@@ -303,7 +303,7 @@ class Ui_Main(object):
         self.worker.emitLog.connect(lambda text: self.logTextBrowser.append(text))
     def retranslateUi(self, Main):
         _translate = QtCore.QCoreApplication.translate
-        Main.setWindowTitle(_translate("Main", "王朝模式掛機工具"))
+        Main.setWindowTitle(_translate("Main", "5v5掛機工具"))
         self.matchTimes.setText(_translate("Main", "0"))
         self.connectPortTextShowLabel.setText(_translate("Main", "ADB位址"))
         self.startButton.setText(_translate("Main", "開始"))
@@ -312,7 +312,7 @@ class Ui_Main(object):
 "<html><head><meta name=\"qrichtext\" content=\"1\" /><style type=\"text/css\">\n"
 "p, li { white-space: pre-wrap; }\n"
 "</style></head><body style=\" font-family:\'微軟正黑體\',\'微軟正黑體\',\'微軟正黑體\',\'微軟正黑體\'; font-size:10pt; font-weight:400; font-style:normal;\">\n"
-"<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"><span style=\" font-family:\'微軟正黑體\';\">點擊開始啟動王朝自動掛機</span></p></body></html>"))
+"<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"><span style=\" font-family:\'微軟正黑體\';\">點擊開始啟動5v5自動掛機</span></p></body></html>"))
         add_addr = self.config["adb_addr"] if self.config else "emulator-5556"
         self.connectPort.setText(_translate("Main", add_addr))
         self.matchTimesTextShowLabel.setText(_translate("Main", "對戰次數"))
